@@ -12,7 +12,7 @@ from coincurve.flags import EC_COMPRESSED, EC_UNCOMPRESSED
 from coincurve.utils import (
     bytes_to_hex, bytes_to_int, der_to_pem, ensure_unicode, get_valid_secret,
     hex_to_bytes, int_to_bytes_padded, pad_scalar, pem_to_der, sha256,
-    validate_secret
+    validate_secret, int_to_bytes
 )
 from ._libsecp256k1 import ffi, lib
 
@@ -52,18 +52,25 @@ class PrivateKey:
         if len(msg_hash) != 32:
             raise ValueError('Message hash must be 32 bytes long.')
 
-        signature = ffi.new('secp256k1_ecdsa_recoverable_signature *')
+        ndata = ffi.new("const int *ndata")
+        ndata[0] = 0
+        while 1:
+            ndata[0] += 1
+            signature = ffi.new('secp256k1_ecdsa_recoverable_signature *')
 
-        signed = lib.secp256k1_ecdsa_sign_recoverable(
-            self.context.ctx, signature, msg_hash, self.secret, ffi.NULL,
-            ffi.NULL
-        )
+            signed = lib.secp256k1_ecdsa_sign_recoverable(
+                self.context.ctx, signature, msg_hash, self.secret, ffi.NULL,
+                ndata
+            )
 
-        if not signed:
-            raise ValueError('The nonce generation function failed, or the '
-                             'private key was invalid.')
+            if not signed:
+                raise ValueError('The nonce generation function failed, or the '
+                                'private key was invalid.')
 
-        return serialize_recoverable(signature, self.context)
+            #return serialize_recoverable(signature, self.context)
+            i, sig = serialize_recoverable(signature, self.context)
+            if i != -1:
+                return int_to_bytes(i) + sig
 
     def ecdh(self, public_key):
         secret = ffi.new('unsigned char [32]')

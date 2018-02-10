@@ -42,6 +42,11 @@ def recover(message, recover_sig, hasher=sha256, context=GLOBAL_CONTEXT):
         return pubkey
     raise Exception('failed to recover ECDSA public key')
 
+def _is_canonical(sig):
+    return (not (sig[0] & 0x80) and
+            not (sig[0] == 0 and not (sig[1] & 0x80)) and
+            not (sig[32] & 0x80) and
+            not (sig[32] == 0 and not (sig[33] & 0x80)))
 
 def serialize_recoverable(recover_sig, context=GLOBAL_CONTEXT):
     output = ffi.new('unsigned char[%d]' % CDATA_SIG_LENGTH)
@@ -51,7 +56,12 @@ def serialize_recoverable(recover_sig, context=GLOBAL_CONTEXT):
         context.ctx, output, recid, recover_sig
     )
 
-    return bytes(ffi.buffer(output, CDATA_SIG_LENGTH)) + int_to_bytes(recid[0])
+    signature = bytes(ffi.buffer(output, CDATA_SIG_LENGTH))
+    if _is_canonical(signature):
+        return recid[0] + 31, signature
+    #return bytes(ffi.buffer(output, CDATA_SIG_LENGTH)) + int_to_bytes(recid[0])
+    else:
+        return -1, signature
 
 
 def deserialize_recoverable(serialized, context=GLOBAL_CONTEXT):
